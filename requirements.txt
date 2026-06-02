@@ -1,0 +1,7 @@
+# Required for normal label generation
+pystrich            # Data Matrix ECC-200 encoder (pure Python)
+python-barcode      # Code 128 module encoding (pure Python)
+
+# Optional: only needed for the --self-test flag (decode every symbol)
+# zxing-cpp         # multi-format decoder (binary wheel, no system libs)
+# pillow            # raster the symbols for the decoder

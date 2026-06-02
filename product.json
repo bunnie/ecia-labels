@@ -1,0 +1,11 @@
+{
+  "label_type": "product",
+  "fields": {
+    "customer_part_number": "596-777A1-ND",
+    "supplier_part_number": "XAF4444",
+    "quantity": "1",
+    "date_code": "1452",
+    "lot_code": "ABC123456789",
+    "country_of_origin": "US"
+  }
+}
