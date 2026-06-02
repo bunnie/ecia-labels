@@ -1,7 +1,7 @@
 # ECIA EIGP 114 label generator
 
 Generates **product** and **logistic** labels that conform to the ECIA
-EIGP 114 specification (the format in your customer's routing guide). Each run
+EIGP 114 specification (the format required by Mouser, for example). Each run
 takes a small JSON file of field values and writes a self-contained
 `index.html` you can open in a browser to print or screenshot.
 
