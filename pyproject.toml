@@ -18,7 +18,7 @@ classifiers = [
     "Intended Audience :: Manufacturing",
     "Topic :: Office/Business",
     "Topic :: Printing",
-    "License :: OSI Approved :: GPLv3",
+    "License-Expression :: OSI Approved :: GPL-3.0-only",
 ]
 dependencies = [
     "pystrich>=0.10",
@@ -26,7 +26,7 @@ dependencies = [
 ]
 
 authors = [{ name = "bunnie", email = "bunnie@kosagi.com" }]
-license = { text = "GPLv3" }
+license = { text = "GPL-3.0-only" }
 
 [project.optional-dependencies]
 # Decode-verification deps for the --self-test flag:
