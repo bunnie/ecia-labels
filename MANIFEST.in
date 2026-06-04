@@ -1,0 +1,4 @@
+include README.md
+include requirements.txt
+recursive-include samples *.json
+recursive-include examples *.html *.csv *.png

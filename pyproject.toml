@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ecia-label-generator"
+version = "0.1.0"
+description = "Generate ECIA EIGP 114 product and logistic shipping labels (Code 128 + Data Matrix ECC-200) as printable HTML."
+readme = "README.md"
+requires-python = ">=3.8"
+keywords = [
+    "ecia", "eigp-114", "barcode", "data-matrix", "code-128",
+    "label", "logistics", "shipping", "electronics",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Manufacturing",
+    "Topic :: Office/Business",
+    "Topic :: Printing",
+    "License :: OSI Approved :: GPLv3",
+]
+dependencies = [
+    "pystrich>=0.10",
+    "python-barcode>=0.16",
+]
+
+authors = [{ name = "bunnie", email = "bunnie@kosagi.com" }]
+license = { text = "GPLv3" }
+
+[project.optional-dependencies]
+# Decode-verification deps for the --self-test flag:
+#   pip install ecia-label-generator[verify]
+verify = ["zxing-cpp>=3.0", "pillow>=10"]
+
+[project.scripts]
+# Installs an "ecia-label" command. For local dev without installing, run
+# `python -m ecia_labels ...` from the source tree instead.
+ecia-label = "ecia_labels.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/bunnie/ecia-labels"
+Source = "https://github.com/bunnie/ecia-labels"
+Issues = "https://github.com/bunnie/ecia-labels/issues"
+
+[tool.setuptools]
+packages = ["ecia_labels"]
