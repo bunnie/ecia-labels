@@ -3,7 +3,7 @@
   "fields": {
     "ship_from": ["J Random Factory", "Factory road", "Factory Land, CN 531010"],
     "ship_to": ["MOUSER ELECTRONICS", "1000 N MAIN ST", "MANSFIELD TX 76063-1514 USA"],
-    "customer_po": "029-HG135",
+    "customer_po": "123-XX1234",
     "items" : [
       {
         "customer_po_line": "1",
