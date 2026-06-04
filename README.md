@@ -58,6 +58,12 @@ self-contained (barcodes are inline SVG), so there are no separate asset files.
 Open the generated `.html` in a browser, then print (the page carries a print
 stylesheet sized in inches) or screenshot.
 
+### Example Output
+
+An example of the results from samples/logistic_multiple.json is included in
+labels/logistic_multiple.html and labels/logistic_multiple.csv. This was
+run with the `--package-count` argument.
+
 ## Data JSON
 
 `label_type` is `"product"` or `"logistic"`. `fields` holds the values.
