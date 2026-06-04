@@ -1,9 +1,9 @@
 # ECIA EIGP 114 label generator
 
 Generates **product** and **logistic** labels that conform to the ECIA
-EIGP 114 specification (the format required by Mouser, for example). Each run
+EIGP 114 specification (the format in your customer's routing guide). Each run
 takes a small JSON file of field values and writes a self-contained
-`index.html` you can open in a browser to print or screenshot.
+`.html` file you can open in a browser to print or screenshot.
 
 Both 1D and 2D symbologies are produced:
 
@@ -26,21 +26,27 @@ pip install zxing-cpp pillow
 ## Usage
 
 ```bash
-# product label
-python generate_label.py samples/product.json -o out/product
+# product label  -> labels/product.html
+python generate_label.py samples/product.json
 
-# logistic label
-python generate_label.py samples/logistic.json -o out/logistic
+# logistic label -> labels/logistic.html (+ labels/logistic.csv)
+python generate_label.py samples/logistic.json
 
 # with a layout override and a decode self-test
-python generate_label.py samples/logistic.json -o out/logistic \
+python generate_label.py samples/logistic.json \
     --layout samples/layout_logistic_custom.json --self-test
+
+# logistic print run: many labels from total + master-carton quantity
+python generate_label.py samples/logistic_print_run.json --seed 7
 ```
 
-Open `out/<label>/index.html` in a browser, then print (the page carries a
-print stylesheet sized in inches) or screenshot. The HTML is fully
-self-contained — barcodes are inline SVG, so there are **no separate image
-asset files** to keep alongside it.
+Output goes to `./labels/` by default (created if missing); pass `-o DIR` to
+change it. Each run writes one file named after the input JSON, e.g.
+`samples/product.json` -> `labels/product.html`. The HTML is fully
+self-contained (barcodes are inline SVG), so there are no separate asset files.
+
+Open the generated `.html` in a browser, then print (the page carries a print
+stylesheet sized in inches) or screenshot.
 
 ## Data JSON
 
@@ -107,6 +113,51 @@ length, or a value with characters Code 128 cannot encode. It warns (but
 continues) on a non-2-letter country code, a non-numeric quantity, or a date
 code that is not a 4-digit YYWW.
 
+## Print runs (logistic)
+
+A logistic data file may include a `print_run` block to produce one label per
+carton automatically:
+
+```json
+{
+  "label_type": "logistic",
+  "fields": {
+    "ship_from": ["Premier Supplier", "1234 Niagara St.", "Buffalo, NY 44556"],
+    "ship_to":   ["Standard Company", "110 Commerce Drive", "Cityville, IL 60601"],
+    "customer_po": "1234567891234",
+    "customer_po_line": "2",
+    "supplier_part_number": "DEF3R3H2055",
+    "date_code": "1452",
+    "country_of_origin": "US",
+    "lot_code": "ABC123456789"
+  },
+  "print_run": { "total_quantity": 3600, "master_carton_quantity": 500 }
+}
+```
+
+When `print_run` is present, omit `quantity` and `package_id` from `fields` --
+they are derived per label:
+
+* The carton breakdown is `total // master` full cartons plus one remainder
+  carton if `total % master` is non-zero. So 3600 / 500 -> eight labels of
+  500, 500, 500, 500, 500, 500, 500, 100 units; 3500 / 500 -> seven of 500.
+* Each label gets a unique 12-character package ID (uppercase letters and
+  digits) in its `(4S) Package ID` field. Re-running generates new IDs; pass
+  `--seed N` to reproduce a run's IDs.
+* All labels are written to one HTML file, each on its own print page.
+
+### Tracking CSV
+
+Every logistic run also writes a `.csv` matching the label file name (e.g.
+`logistic_print_run.csv`), one row per
+label, for pasting into your tracking spreadsheet:
+
+| Package ID   | PO Number     | Supplier PN | Quantity |
+|--------------|---------------|-------------|----------|
+| UJZDE8GXD6NC | 1234567891234 | DEF3R3H2055 | 500      |
+| ...          | ...           | ...         | ...      |
+| 4EDT2SYWB3WK | 1234567891234 | DEF3R3H2055 | 100      |
+
 ## Optional layout override (`--layout`)
 
 The built-in layouts reproduce the EIGP 114 example labels, so you usually
@@ -164,6 +215,7 @@ ecia_labels/
   validate.py            JSON parsing + validation
   barcodes.py            Code 128 -> SVG
   datamatrix.py          Format 06 message + ECC-200 -> SVG
+  production.py          print-run breakdown, package IDs, tracking CSV
   layout.py              HTML layout engine
   verify.py              optional decode self-test
 samples/                 example data + layout-override JSON

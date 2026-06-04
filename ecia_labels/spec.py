@@ -77,7 +77,7 @@ LABELS = {
 #                         (the logistic-label look)
 DEFAULT_LAYOUTS = {
     "product": dict(
-        width_in=4.0,
+        width_in=5.0,
         hrt_style="stacked",
         rows=[
             {"type": "field", "name": "customer_part_number"},
@@ -91,7 +91,7 @@ DEFAULT_LAYOUTS = {
         ],
     ),
     "logistic": dict(
-        width_in=4.0,
+        width_in=5.0,
         hrt_style="inline",
         rows=[
             {"type": "address", "left": "ship_from", "right": "ship_to"},

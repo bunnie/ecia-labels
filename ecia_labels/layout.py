@@ -155,22 +155,15 @@ body {{ font-family: Helvetica, Arial, "Liberation Sans", sans-serif;
 @media print {{
     @page {{ margin: 0.25in; }}
     html, body {{ background: #fff; }}
-    .sheet {{ padding: 0; }}
+    .sheet {{ padding: 0; page-break-after: always; }}
+    .sheet:last-child {{ page-break-after: auto; }}
     .label {{ page-break-inside: avoid; }}
 }}
 """
 
 
-def render_html(label_type, fields, raw, layout=None):
-    """Return (html_document, format06_message)."""
-    layout = layout or spec.DEFAULT_LAYOUTS[label_type]
-    width = layout.get("width_in", 4.5)
-    cap_width = layout.get("caption_width_in", 1.5)
-    hrt_style = layout.get("hrt_style",
-                           spec.DEFAULT_LAYOUTS[label_type]["hrt_style"])
-    xdim_in = layout.get("xdim_in", barcodes.DEFAULT_XDIM_IN)
-    module_in = layout.get("module_in", datamatrix.DEFAULT_MODULE_IN)
-
+def _build_label(label_type, fields, raw, layout, hrt_style, xdim_in, module_in):
+    """Return ('<div class="label ...">...</div>', format06_message)."""
     # Build the Format 06 message from barcoded fields in layout order.
     elements = []
     for key in _barcoded_order(layout):
@@ -201,15 +194,47 @@ def render_html(label_type, fields, raw, layout=None):
         else:
             raise ValueError(f"unknown layout row type: {rtype!r}")
 
+    label_html = (f'<div class="label {label_type}">{"".join(body_parts)}</div>')
+    return label_html, message
+
+
+def render_document(label_type, labels_fields, raw, layout=None):
+    """Render one or more labels into a single HTML document.
+
+    ``labels_fields`` is a list of field dicts (one per label). Each label gets
+    its own print page. Returns (html_document, [format06_message, ...]).
+    """
+    layout = layout or spec.DEFAULT_LAYOUTS[label_type]
+    width = layout.get("width_in", 4.0)
+    cap_width = layout.get("caption_width_in", 1.7)
+    hrt_style = layout.get("hrt_style",
+                           spec.DEFAULT_LAYOUTS[label_type]["hrt_style"])
+    xdim_in = layout.get("xdim_in", barcodes.DEFAULT_XDIM_IN)
+    module_in = layout.get("module_in", datamatrix.DEFAULT_MODULE_IN)
+
+    sheets = []
+    messages = []
+    for fields in labels_fields:
+        label_html, message = _build_label(
+            label_type, fields, raw, layout, hrt_style, xdim_in, module_in)
+        sheets.append(f'<div class="sheet">{label_html}</div>')
+        messages.append(message)
+
     css = _CSS.format(width=width, cap_width=cap_width)
     title = f"ECIA {label_type.capitalize()} Label"
+    if len(sheets) > 1:
+        title += f" ({len(sheets)} labels)"
     html = (
         "<!DOCTYPE html>\n"
         '<html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f"<title>{escape(title)}</title><style>{css}</style></head>"
-        f'<body><div class="sheet"><div class="label {label_type}">'
-        f'{"".join(body_parts)}'
-        "</div></div></body></html>"
+        f'<body>{"".join(sheets)}</body></html>'
     )
-    return html, message
+    return html, messages
+
+
+def render_html(label_type, fields, raw, layout=None):
+    """Back-compat single-label wrapper. Returns (html, format06_message)."""
+    html, messages = render_document(label_type, [fields], raw, layout)
+    return html, messages[0]
