@@ -19,9 +19,9 @@ from . import barcodes, datamatrix, spec
 # --------------------------------------------------------------------------- #
 # field helpers
 # --------------------------------------------------------------------------- #
-def _field_parts(key, fields, raw):
+def _field_parts(key, fields):
     """Return (di, value, barcode_payload) for a barcoded field."""
-    di = spec.resolved_di(key, raw)
+    di = spec.resolved_di(key, fields)
     value = fields[key]
     return di, value, di + value
 
@@ -44,8 +44,8 @@ def _hrt_label(di, name):
     return f'<span class="di">({escape(di)})</span> {escape(name)}'
 
 
-def _render_field(key, fields, raw, hrt_style, xdim_in):
-    di, value, payload = _field_parts(key, fields, raw)
+def _render_field(key, fields, hrt_style, xdim_in):
+    di, value, payload = _field_parts(key, fields)
     name = spec.FIELDS[key]["name"]
     bars = barcodes.code128_svg(payload, xdim_in=xdim_in)
     if hrt_style == "stacked":
@@ -67,10 +67,10 @@ def _render_field(key, fields, raw, hrt_style, xdim_in):
     )
 
 
-def _render_columns(keys, fields, raw, xdim_in):
+def _render_columns(keys, fields, xdim_in):
     cells = []
     for key in keys:
-        di, value, payload = _field_parts(key, fields, raw)
+        di, value, payload = _field_parts(key, fields)
         name = spec.FIELDS[key]["name"]
         bars = barcodes.code128_svg(payload, xdim_in=xdim_in)
         cells.append(
@@ -162,13 +162,13 @@ body {{ font-family: Helvetica, Arial, "Liberation Sans", sans-serif;
 """
 
 
-def _build_label(label_type, fields, raw, layout, hrt_style, xdim_in, module_in):
+def _build_label(label_type, fields, layout, hrt_style, xdim_in, module_in):
     """Return ('<div class="label ...">...</div>', format06_message)."""
     # Build the Format 06 message from barcoded fields in layout order.
     elements = []
     for key in _barcoded_order(layout):
         if key in fields:
-            di, value, _ = _field_parts(key, fields, raw)
+            di, value, _ = _field_parts(key, fields)
             elements.append((di, value))
     message = datamatrix.build_format06(elements)
 
@@ -178,11 +178,11 @@ def _build_label(label_type, fields, raw, layout, hrt_style, xdim_in, module_in)
         if rtype == "field":
             if row["name"] in fields:
                 body_parts.append(
-                    _render_field(row["name"], fields, raw, hrt_style, xdim_in))
+                    _render_field(row["name"], fields, hrt_style, xdim_in))
         elif rtype == "columns":
             keys = [k for k in row["fields"] if k in fields]
             if keys:
-                body_parts.append(_render_columns(keys, fields, raw, xdim_in))
+                body_parts.append(_render_columns(keys, fields, xdim_in))
         elif rtype == "address":
             body_parts.append(
                 _render_address(row["left"], row["right"], fields))
@@ -198,11 +198,12 @@ def _build_label(label_type, fields, raw, layout, hrt_style, xdim_in, module_in)
     return label_html, message
 
 
-def render_document(label_type, labels_fields, raw, layout=None):
+def render_document(label_type, labels_fields, layout=None):
     """Render one or more labels into a single HTML document.
 
-    ``labels_fields`` is a list of field dicts (one per label). Each label gets
-    its own print page. Returns (html_document, [format06_message, ...]).
+    ``labels_fields`` is a list of field dicts (one per label); each dict is its
+    own DI-override source. Each label gets its own print page. Returns
+    (html_document, [format06_message, ...]).
     """
     layout = layout or spec.DEFAULT_LAYOUTS[label_type]
     width = layout.get("width_in", 4.0)
@@ -216,7 +217,7 @@ def render_document(label_type, labels_fields, raw, layout=None):
     messages = []
     for fields in labels_fields:
         label_html, message = _build_label(
-            label_type, fields, raw, layout, hrt_style, xdim_in, module_in)
+            label_type, fields, layout, hrt_style, xdim_in, module_in)
         sheets.append(f'<div class="sheet">{label_html}</div>')
         messages.append(message)
 
@@ -234,7 +235,7 @@ def render_document(label_type, labels_fields, raw, layout=None):
     return html, messages
 
 
-def render_html(label_type, fields, raw, layout=None):
+def render_html(label_type, fields, layout=None):
     """Back-compat single-label wrapper. Returns (html, format06_message)."""
-    html, messages = render_document(label_type, [fields], raw, layout)
+    html, messages = render_document(label_type, [fields], layout)
     return html, messages[0]

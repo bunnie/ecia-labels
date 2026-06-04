@@ -1,7 +1,11 @@
-# Required for normal label generation
-pystrich            # Data Matrix ECC-200 encoder (pure Python)
-python-barcode      # Code 128 module encoding (pure Python)
+# Runtime dependencies for label generation.
+pystrich>=0.10        # Data Matrix ECC-200 encoder (pure Python)
+python-barcode>=0.16  # Code 128 module encoding (pure Python)
 
-# Optional: only needed for the --self-test flag (decode every symbol)
-# zxing-cpp         # multi-format decoder (binary wheel, no system libs)
-# pillow            # raster the symbols for the decoder
+# Optional: only needed for the --self-test flag, which decodes every generated
+# symbol to confirm it scans. Install with:  pip install zxing-cpp pillow
+#   zxing-cpp>=3.0      # multi-format decoder (binary wheel, no system libs)
+#   pillow>=10          # raster the symbols for the decoder
+#
+# When installed as a package this is the "verify" extra:
+#   pip install ecia-label-generator[verify]

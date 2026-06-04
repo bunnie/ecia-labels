@@ -5,3 +5,5 @@ labels/
 
 # This is where the incoming JSON specs go
 specs/
+
+*.egg_info/

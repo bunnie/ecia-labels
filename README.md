@@ -18,27 +18,36 @@ Every generated symbol has been verified to scan (see *Self-test* below).
 ## Install
 
 ```bash
-pip install -r requirements.txt
-# optional, only for --self-test:
-pip install zxing-cpp pillow
+pip install .                 # installs the `ecia-label` command
+pip install .[verify]         # also installs the --self-test decoder deps
 ```
+
+For local development, install editable (`pip install -e .`) or skip installing
+entirely and run the module from the source tree with `python -m ecia_labels`
+(only `pip install -r requirements.txt` is needed for that).
 
 ## Usage
 
+Once installed, use the `ecia-label` command. During local development the
+equivalent is `python -m ecia_labels` run from the source tree.
+
 ```bash
 # product label  -> labels/product.html
-python generate_label.py samples/product.json
+ecia-label samples/product.json
 
 # logistic label -> labels/logistic.html (+ labels/logistic.csv)
-python generate_label.py samples/logistic.json
+ecia-label samples/logistic.json
 
 # with a layout override and a decode self-test
-python generate_label.py samples/logistic.json \
+ecia-label samples/logistic.json \
     --layout samples/layout_logistic_custom.json --self-test
 
 # logistic shipment: multiple PO line items, split into cartons,
-# each label numbered (13Q) within its line item
-python generate_label.py samples/logistic_shipment.json --package-count
+# each label numbered (13Q) across the whole shipment
+ecia-label samples/logistic_shipment.json --package-count
+
+# same thing without installing, from the source tree:
+python -m ecia_labels samples/logistic_shipment.json --package-count
 ```
 
 Output goes to `./labels/` by default (created if missing); pass `-o DIR` to
@@ -152,9 +161,9 @@ set per item (preferred) or shipment-wide (applies to items without their own).
 Uniqueness is also enforced globally across the whole run.
 
 **Package count (`--package-count`).** Adds the `(13Q) Package Count` field,
-numbered within each line item — line 1 above gets `1/7 … 7/7`, line 2 gets
-`1/2`, `2/2`. (Numbering is per line item, not across the whole shipment; ask if
-you want shipment-wide counts instead.)
+numbered across the whole shipment — with the example above the 13 labels are
+`1/13`, `2/13`, … `13/13` in line-item order. This reflects what the receiver
+checks: total packages in the shipment, each with a unique number.
 
 ### Tracking CSV
 
@@ -164,9 +173,9 @@ spreadsheet (the `Package Count` column appears only with `--package-count`):
 
 | Package ID   | PO Number | PO Line | Supplier PN      | Quantity | Package Count |
 |--------------|-----------|---------|------------------|----------|---------------|
-| V8CJW2WVDBWF | 029-HG135 | 1       | BAOCHIP-DABAO-V3 | 500      | 1/7           |
+| V8CJW2WVDBWF | 029-HG135 | 1       | BAOCHIP-DABAO-V3 | 500      | 1/13          |
 | ...          | ...       | ...     | ...              | ...      | ...           |
-| 2OQWEO66GRDI | 029-HG135 | 3       | BAOCHIP-ANOTHER  | 5        | 2/2           |
+| 2OQWEO66GRDI | 029-HG135 | 3       | BAOCHIP-ANOTHER  | 5        | 13/13         |
 
 ## Optional layout override (`--layout`)
 
@@ -213,14 +222,17 @@ The Data Matrix encodes the barcoded fields in the order they appear in `rows`.
 
 `--self-test` rasterises every generated symbol and decodes it with
 `zxing-cpp`, asserting the Data Matrix round-trips byte-for-byte (separators
-included) and each Code 128 decodes to its `DI+value`. Requires
-`pip install zxing-cpp pillow`; without them the flag is skipped with a note.
+included) and each Code 128 decodes to its `DI+value`. Requires the decoder
+deps (`pip install .[verify]`, or `pip install zxing-cpp pillow`); without them
+the flag is skipped with a note.
 
 ## Layout
 
 ```
-generate_label.py        CLI
+pyproject.toml           packaging / `ecia-label` entry point
 ecia_labels/
+  __main__.py            enables `python -m ecia_labels`
+  cli.py                 command-line interface
   spec.py                field registry, separators, default layouts
   validate.py            JSON parsing + validation
   barcodes.py            Code 128 -> SVG
@@ -236,11 +248,11 @@ samples/                 example data + layout-override JSON
 Vibe-coded with Claude Opus 4.8-high using the following prompt:
 
 ```
-I just got sent this guide from a customer of the shipping label format they require for my product. I need a python script that can generate an ECIA product label and ECIA logistics label, as described in this document (appendix A.1, A.3 outline the field descriptions, we are only using the "required" ones, with the exception for the product label we are adding the customer part number). 
+I just got sent this guide from a customer of the shipping label format they require for my product. I need a python script that can generate an ECIA product label and ECIA logistics label, as described in this document (appendix A.1, A.3 outline the field descriptions, we are only using the "required" ones, with the exception for the product label we are adding the customer part number).
 
 These fields should be specified as a JSON file that goes into the script, and the output should be a product label and a logistics label that conforms to their specification. The labels could be described as a simple HTML page, in which case the output is a directory containing the label and its image assets, with an index.html that I can open using a local browser to then screenshot and/or print to generate the label.
 
-An example of a compliant product label is on page 16 of 44 (PDF page 34), "ECIA Format -Product1", and a logistics label is two pages later on page 18 of 44 (PDF page 36). 
+An example of a compliant product label is on page 16 of 44 (PDF page 34), "ECIA Format -Product1", and a logistics label is two pages later on page 18 of 44 (PDF page 36).
 
 For the python script you can assume I'm running on linux, use argparse, pathlib where possible, and that I am relatively fluent in command line tools and editing python. The hard part for me is encoding the CODE39 barcodes, and then aggregating it into a Data Matrix ECC 200 code that scans according to their specification, and finally placing these fields. I would imagine that the script you write would have a modules for:
 
