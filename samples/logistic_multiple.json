@@ -1,0 +1,37 @@
+{
+  "label_type": "logistic",
+  "fields": {
+    "ship_from": ["J Random Factory", "Factory road", "Factory Land, CN 531010"],
+    "ship_to": ["MOUSER ELECTRONICS", "1000 N MAIN ST", "MANSFIELD TX 76063-1514 USA"],
+    "customer_po": "029-HG135",
+    "items" : [
+      {
+        "customer_po_line": "1",
+        "supplier_part_number": "SUPP-TEST1",
+        "quantity": "3500",
+        "date_code": "2626",
+        "lot_code": "LOT-0033",
+        "country_of_origin": "CN",
+        "master_carton_quantity": 500
+      },
+      {
+        "customer_po_line": "2",
+        "supplier_part_number": "SUPP-TEST2",
+        "quantity": "200",
+        "date_code": "2624",
+        "lot_code": "LOT-0036",
+        "country_of_origin": "KR",
+        "master_carton_quantity": 50
+      },
+      {
+        "customer_po_line": "3",
+        "supplier_part_number": "SUPP-TEST3",
+        "quantity": "15",
+        "date_code": "2627",
+        "lot_code": "LOT-0042",
+        "country_of_origin": "DE",
+        "master_carton_quantity": 10
+      }
+    ]
+  }
+}
