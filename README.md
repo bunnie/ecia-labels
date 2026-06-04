@@ -36,8 +36,9 @@ python generate_label.py samples/logistic.json
 python generate_label.py samples/logistic.json \
     --layout samples/layout_logistic_custom.json --self-test
 
-# logistic print run: many labels from total + master-carton quantity
-python generate_label.py samples/logistic_print_run.json --seed 7
+# logistic shipment: multiple PO line items, split into cartons,
+# each label numbered (13Q) within its line item
+python generate_label.py samples/logistic_shipment.json --package-count
 ```
 
 Output goes to `./labels/` by default (created if missing); pass `-o DIR` to
@@ -68,8 +69,10 @@ Product (required + customer part number):
 }
 ```
 
-Logistic (required, incl. PO Line). `ship_from`/`ship_to` are text only (no
-barcode) and accept a list of address lines:
+Logistic uses shipment-level fields plus an `items` array of PO line items.
+`ship_from`/`ship_to` are text only (no barcode) and accept a list of address
+lines. Each item has its own `quantity` (the line total) and an optional
+`master_carton_quantity` that splits the line into cartons:
 
 ```json
 {
@@ -77,86 +80,93 @@ barcode) and accept a list of address lines:
   "fields": {
     "ship_from": ["Premier Supplier", "1234 Niagara St.", "Buffalo, NY 44556"],
     "ship_to":   ["Standard Company", "110 Commerce Drive", "Cityville, IL 60601"],
-    "customer_po": "1234567891234",
-    "customer_po_line": "2",
-    "supplier_part_number": "DEF3R3H2055",
-    "quantity": "50",
-    "package_id": "81664789011239840",
-    "date_code": "1452",
-    "country_of_origin": "US",
-    "lot_code": "ABC123456789"
+    "customer_po": "029-HG135",
+    "items": [
+      { "customer_po_line": "1", "supplier_part_number": "BAOCHIP-DABAO-V3",
+        "quantity": "3500", "date_code": "2626", "lot_code": "BAO-0033",
+        "country_of_origin": "CN", "master_carton_quantity": 500 },
+      { "customer_po_line": "2", "supplier_part_number": "BAOCHIP-ANOTHER",
+        "quantity": "15", "date_code": "2627", "lot_code": "BAO-0042",
+        "country_of_origin": "CN", "master_carton_quantity": 10 }
+    ]
   }
 }
 ```
+
+A single-carton item can omit `master_carton_quantity` (one label for the whole
+`quantity`) and may supply its own `package_id`. The older flat logistic format
+(per-line fields directly under `fields`, no `items`, optional top-level
+`print_run`) is still accepted and treated as a single line item.
 
 ### Fields and Data Identifiers
 
 | field key              | DI    | max | label    | notes                              |
 |------------------------|-------|-----|----------|------------------------------------|
-| customer_part_number   | P     | 40  | both¹    |                                    |
-| supplier_part_number   | 1P    | 40  | both     |                                    |
-| quantity               | Q     | 9   | both     |                                    |
+| customer_part_number   | P     | 40  | product¹ |                                    |
+| supplier_part_number   | 1P    | 40  | both     | logistic: per item                 |
+| quantity               | Q     | 9   | both     | logistic: per item = line total    |
 | date_code              | 10D   | 7   | both     | `9D`/`10D`; YYWW; override `*_di`  |
-| lot_code               | 1T    | 20  | both     |                                    |
+| lot_code               | 1T    | 20  | both     | logistic: per item                 |
 | country_of_origin      | 4L    | 2   | both     | ISO 3166 alpha-2                   |
-| customer_po            | K     | 25  | logistic |                                    |
-| customer_po_line       | 4K    | 5   | logistic |                                    |
-| package_id             | 4S    | 25  | logistic | `4S` like / `5S` mixed; override   |
-| ship_from / ship_to    | —     | —   | logistic | text only, list of lines           |
+| customer_po            | K     | 25  | logistic | shipment-level                     |
+| customer_po_line       | 4K    | 5   | logistic | per item                           |
+| package_id             | 4S    | 25  | logistic | generated per carton²; `5S` via DI |
+| package_count          | 13Q   | 11  | logistic | only with `--package-count`        |
+| ship_from / ship_to    | —     | —   | logistic | shipment-level, text, list of lines|
 
 ¹ Customer part number is optional in EIGP 114; it is required here on the
 product label per your customer's rule. Override a multi-DI field's identifier
-by adding e.g. `"date_code_di": "9D"` or `"package_id_di": "5S"` to `fields`.
+by adding e.g. `"date_code_di": "9D"` or `"package_id_di": "5S"` (product:
+under `fields`; logistic: inside the item).
+
+² For a split line `package_id` is generated per carton (any supplied value is
+ignored). A single-carton item with no `master_carton_quantity` uses a supplied
+`package_id` if present, else generates one.
 
 Validation aborts on a missing/empty required field, a value over its max
-length, or a value with characters Code 128 cannot encode. It warns (but
-continues) on a non-2-letter country code, a non-numeric quantity, or a date
-code that is not a 4-digit YYWW.
+length, a value with characters Code 128 cannot encode, or a non-integer
+`quantity`/`master_carton_quantity`. It warns (but continues) on a non-2-letter
+country code or a date code that is not a 4-digit YYWW.
 
-## Print runs (logistic)
+## Logistic shipments: cartons, package IDs, package counts
 
-A logistic data file may include a `print_run` block to produce one label per
-carton automatically:
+Each item is split into labels by its `master_carton_quantity`: `total // master`
+full cartons plus a remainder carton when `total % master` is non-zero. With the
+example above, line 1 (3500 / 500) yields seven 500-unit labels and line 2
+(15 / 10) yields two labels of 10 and 5 — and the whole run goes into one HTML
+file, one label per print page.
 
-```json
-{
-  "label_type": "logistic",
-  "fields": {
-    "ship_from": ["Premier Supplier", "1234 Niagara St.", "Buffalo, NY 44556"],
-    "ship_to":   ["Standard Company", "110 Commerce Drive", "Cityville, IL 60601"],
-    "customer_po": "1234567891234",
-    "customer_po_line": "2",
-    "supplier_part_number": "DEF3R3H2055",
-    "date_code": "1452",
-    "country_of_origin": "US",
-    "lot_code": "ABC123456789"
-  },
-  "print_run": { "total_quantity": 3600, "master_carton_quantity": 500 }
-}
-```
+**Package IDs.** Every label gets a unique 12-character ID (uppercase letters
+and digits) in its `(4S) Package ID` field. The generator is seeded per item
+from the base seed plus the PO line, the supplier part number and an optional
+`po_split`, so:
 
-When `print_run` is present, omit `quantity` and `package_id` from `fields` --
-they are derived per label:
+* re-running the same file reproduces the same IDs (idempotent);
+* different line items never share an ID sequence;
+* bumping `po_split` on a line re-rolls only that line's IDs — use this when you
+  split one line/lot across multiple physical shipments.
 
-* The carton breakdown is `total // master` full cartons plus one remainder
-  carton if `total % master` is non-zero. So 3600 / 500 -> eight labels of
-  500, 500, 500, 500, 500, 500, 500, 100 units; 3500 / 500 -> seven of 500.
-* Each label gets a unique 12-character package ID (uppercase letters and
-  digits) in its `(4S) Package ID` field. Re-running generates new IDs; pass
-  `--seed N` to reproduce a run's IDs.
-* All labels are written to one HTML file, each on its own print page.
+The base seed is `customer_po` by default (so it is stable for a PO), or
+`--seed VALUE` to override, or random if neither is available. `po_split` may be
+set per item (preferred) or shipment-wide (applies to items without their own).
+Uniqueness is also enforced globally across the whole run.
+
+**Package count (`--package-count`).** Adds the `(13Q) Package Count` field,
+numbered within each line item — line 1 above gets `1/7 … 7/7`, line 2 gets
+`1/2`, `2/2`. (Numbering is per line item, not across the whole shipment; ask if
+you want shipment-wide counts instead.)
 
 ### Tracking CSV
 
 Every logistic run also writes a `.csv` matching the label file name (e.g.
-`logistic_print_run.csv`), one row per
-label, for pasting into your tracking spreadsheet:
+`logistic_shipment.csv`), one row per label, for pasting into your tracking
+spreadsheet (the `Package Count` column appears only with `--package-count`):
 
-| Package ID   | PO Number     | Supplier PN | Quantity |
-|--------------|---------------|-------------|----------|
-| UJZDE8GXD6NC | 1234567891234 | DEF3R3H2055 | 500      |
-| ...          | ...           | ...         | ...      |
-| 4EDT2SYWB3WK | 1234567891234 | DEF3R3H2055 | 100      |
+| Package ID   | PO Number | PO Line | Supplier PN      | Quantity | Package Count |
+|--------------|-----------|---------|------------------|----------|---------------|
+| V8CJW2WVDBWF | 029-HG135 | 1       | BAOCHIP-DABAO-V3 | 500      | 1/7           |
+| ...          | ...       | ...     | ...              | ...      | ...           |
+| 2OQWEO66GRDI | 029-HG135 | 3       | BAOCHIP-ANOTHER  | 5        | 2/2           |
 
 ## Optional layout override (`--layout`)
 

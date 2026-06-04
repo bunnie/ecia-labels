@@ -26,18 +26,35 @@ FORMAT_INDICATOR = "06"
 #       package id 4S/5S) the spec-default is used; override per-field in the
 #       data JSON with "<field>_di" if you need the alternate.
 FIELDS = {
-    "customer_part_number": dict(di="P",   name="Customer PN",          max_len=40, kind="barcode"),
-    "supplier_part_number": dict(di="1P",  name="Supplier PN",          max_len=40, kind="barcode"),
+    "customer_part_number": dict(di="P",   name="Customer Part Number", max_len=40, kind="barcode"),
+    "supplier_part_number": dict(di="1P",  name="Supplier Part Number", max_len=40, kind="barcode"),
     "quantity":             dict(di="Q",   name="Quantity",             max_len=9,  kind="barcode"),
     "date_code":            dict(di="10D", name="Date Code",            max_len=7,  kind="barcode"),
     "lot_code":             dict(di="1T",  name="Lot Code",             max_len=20, kind="barcode"),
-    "country_of_origin":    dict(di="4L",  name="COO",                  max_len=2,  kind="barcode"),
+    "country_of_origin":    dict(di="4L",  name="Country of Origin",    max_len=2,  kind="barcode"),
     "customer_po":          dict(di="K",   name="PO Number",            max_len=25, kind="barcode"),
     "customer_po_line":     dict(di="4K",  name="PO Line",              max_len=5,  kind="barcode"),
     "package_id":           dict(di="4S",  name="Package ID",           max_len=25, kind="barcode"),
+    "package_count":        dict(di="13Q", name="Package Count",        max_len=11, kind="barcode"),
     "ship_from":            dict(di=None,  name="Ship From",            max_len=None, kind="text"),
     "ship_to":              dict(di=None,  name="Ship To",              max_len=None, kind="text"),
 }
+
+# --- Logistic shipment- vs item-level fields (new multi-item format) ----------
+# Shipment-level fields apply to every label in the run; item-level fields vary
+# per PO line. po_split (optional, shipment or item level) is seed-only and is
+# not printed on the label.
+LOGISTIC_SHIPMENT_REQUIRED = ["ship_from", "ship_to", "customer_po"]
+LOGISTIC_ITEM_REQUIRED = [
+    "customer_po_line", "supplier_part_number", "quantity",
+    "date_code", "lot_code", "country_of_origin",
+]
+# Item-level label fields copied onto each carton's label (besides quantity,
+# package_id and package_count, which are derived).
+LOGISTIC_ITEM_LABEL_FIELDS = [
+    "customer_po_line", "supplier_part_number",
+    "date_code", "lot_code", "country_of_origin",
+]
 
 # Permitted alternate DIs (validated when *_di override is supplied).
 ALTERNATE_DIS = {
@@ -101,6 +118,7 @@ DEFAULT_LAYOUTS = {
             {"type": "field", "name": "supplier_part_number"},
             {"type": "field", "name": "quantity"},
             {"type": "field", "name": "package_id"},
+            {"type": "field", "name": "package_count"},
             {"type": "break"},
             {"type": "columns", "fields": ["date_code", "country_of_origin"]},
             {"type": "field", "name": "lot_code"},
@@ -114,7 +132,7 @@ DEFAULT_LAYOUTS = {
 def resolved_di(field_key, data):
     """Return the DI for a field, honouring an optional '<field>_di' override."""
     base = FIELDS[field_key]["di"]
-    override = data.get(field_key + "_di")
+    override = data.get(field_key + "_di") if data else None
     if override:
         allowed = ALTERNATE_DIS.get(field_key)
         if allowed and override not in allowed:

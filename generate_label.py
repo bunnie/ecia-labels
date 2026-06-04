@@ -3,34 +3,34 @@
 
 Usage:
     python generate_label.py DATA.json [-o OUTDIR] [--layout LAYOUT.json]
-                             [--seed N] [--self-test]
+                             [--package-count] [--seed VALUE] [--self-test]
 
-DATA.json sets label_type ("product" | "logistic") and the field values.
 Output goes to OUTDIR (default: ./labels, created if missing). Each run writes
-one file named after the input JSON, e.g. logistic_print_run.json ->
-labels/logistic_print_run.html. Logistic runs also write a matching .csv.
+one file named after the input JSON, e.g. shipment.json -> labels/shipment.html.
+Logistic runs also write a matching .csv tracking sheet.
 
-Logistic labels may include a "print_run" block:
+Logistic data uses shipment-level fields (ship_from, ship_to, customer_po,
+optional po_split) plus an "items" array of PO line items. Each item has a
+quantity (the line total) and an optional master_carton_quantity that splits
+the line into cartons (full cartons plus a remainder). Every carton becomes a
+label with a unique package ID; with --package-count each label also carries a
+(13Q) Package Count "n/total" within its line item.
 
-    "print_run": { "total_quantity": 3600, "master_carton_quantity": 500 }
-
-which derives one label per carton (full cartons of the master quantity plus a
-remainder), each with a unique generated 12-character package ID. All labels go
-into the one HTML file (one print page each), and the matching .csv tracking
-sheet (package id, PO number, supplier PN, quantity) is written alongside.
+Package IDs are seeded per item from the base seed (customer_po, or --seed) plus
+the PO line, supplier part number and optional po_split, so a line reproduces
+its IDs on re-run, different lines never collide, and bumping po_split re-rolls
+a line that is re-split across shipments.
 """
 from __future__ import annotations
 
 import argparse
 import json
-import random
 import sys
 from pathlib import Path
 
 from ecia_labels import layout as layout_mod
 from ecia_labels import production, spec, validate, verify
 
-# Soft guard: warn (don't block) above this many labels in one run.
 LARGE_RUN_WARN = 250
 
 
@@ -56,9 +56,12 @@ def main(argv=None) -> int:
                    help="output directory (created if missing; default: labels)")
     p.add_argument("--layout", type=Path, default=None,
                    help="optional layout-override JSON")
+    p.add_argument("--package-count", action="store_true",
+                   help="add the (13Q) Package Count field, numbered per line "
+                        "item (e.g. 1/7 .. 7/7)")
     p.add_argument("--seed", default=None,
-                   help="explicit seed for package IDs; overrides the default "
-                        "(seed from customer_po, else random)")
+                   help="explicit base seed for package IDs; overrides the "
+                        "default (customer_po, else random)")
     p.add_argument("--self-test", action="store_true",
                    help="decode every generated symbol to confirm it scans "
                         "(needs: pip install zxing-cpp pillow)")
@@ -66,7 +69,7 @@ def main(argv=None) -> int:
 
     try:
         data = validate.load(args.data)
-        label_type, fields, print_run, warnings = validate.validate(data)
+        label_type, payload, warnings = validate.validate(data)
     except validate.ValidationError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -74,26 +77,24 @@ def main(argv=None) -> int:
     for w in warnings:
         print(f"warning: {w}", file=sys.stderr)
 
-    # Package-ID RNG seed: an explicit --seed wins; otherwise seed from
-    # customer_po so a given PO reproduces the same IDs; otherwise random.
-    if args.seed is not None:
-        seed = args.seed
-        seed_source = "--seed"
-    elif fields.get("customer_po"):
-        seed = fields["customer_po"]
-        seed_source = "customer_po"
+    # Build the per-label field dicts.
+    seed_source = None
+    if label_type == "product":
+        labels_fields = [payload["fields"]]
     else:
-        seed = None
-        seed_source = "random"
-    rng = random.Random(seed)
-
-    # Expand a print run into one field set per label.
-    if print_run is not None:
-        labels_fields = production.expand_print_run(
-            fields, print_run["total_quantity"],
-            print_run["master_carton_quantity"], rng)
-    else:
-        labels_fields = [fields]
+        shipment, items = payload["shipment"], payload["items"]
+        if args.seed is not None:
+            base_seed, seed_source = args.seed, "--seed"
+        elif shipment.get("customer_po"):
+            base_seed, seed_source = shipment["customer_po"], "customer_po"
+        else:
+            base_seed, seed_source = None, "random"
+        try:
+            labels_fields = production.expand_shipment(
+                shipment, items, base_seed, args.package_count)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
 
     if len(labels_fields) > LARGE_RUN_WARN:
         print(f"warning: this run produces {len(labels_fields)} labels in one "
@@ -102,7 +103,7 @@ def main(argv=None) -> int:
     try:
         layout = _load_layout(label_type, args.layout) if args.layout else None
         html, messages = layout_mod.render_document(
-            label_type, labels_fields, data["fields"], layout)
+            label_type, labels_fields, layout)
     except (ValueError, KeyError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -114,21 +115,23 @@ def main(argv=None) -> int:
     html_path.write_text(html, encoding="utf-8")
     print(f"wrote {html_path} ({len(labels_fields)} label(s))")
 
-    # Tracking CSV for logistic labels, named to match the label file.
     if label_type == "logistic":
-        csv_text = production.tracking_csv(labels_fields)
+        csv_text = production.tracking_csv(
+            labels_fields, include_package_count=args.package_count)
         csv_path = outdir / f"{stem}.csv"
         csv_path.write_text(csv_text, encoding="utf-8")
         print(f"wrote {csv_path}")
 
-    if print_run is not None:
-        qtys = [f["quantity"] for f in labels_fields]
-        print(f"print run: {print_run['total_quantity']} units / "
-              f"{print_run['master_carton_quantity']} per carton "
-              f"-> {len(qtys)} labels [{', '.join(qtys)}]")
+        for item in payload["items"]:
+            total = int(item["quantity"])
+            master = item.get("master_carton_quantity")
+            cartons = (production.carton_breakdown(total, int(master))
+                       if master else [total])
+            print(f"  line {item.get('customer_po_line')} "
+                  f"{item.get('supplier_part_number')}: "
+                  f"{len(cartons)} label(s) {cartons}")
         print(f"package IDs seeded from: {seed_source}")
 
-    # Show the first label's payload (all share structure; only Q + 4S differ).
     print(f"2D Format 06 payload (label 1): {_readable_message(messages[0])}")
 
     if args.self_test:
@@ -142,19 +145,19 @@ def main(argv=None) -> int:
                 if not res:
                     print(f" FAIL label {i}: {detail}"); ok = False
                 for key in lf:
+                    if key.endswith("_di") or key not in spec.FIELDS:
+                        continue
                     if spec.FIELDS[key]["kind"] != "barcode":
                         continue
-                    di = spec.resolved_di(key, data["fields"])
+                    di = spec.resolved_di(key, lf)
                     res, detail = verify.verify_code128(di + lf[key])
                     if not res:
                         print(f" FAIL label {i} {key}: {detail}"); ok = False
             if not ok:
                 print("self-test: FAILURES detected", file=sys.stderr)
                 return 1
-            symbols = sum(1 + sum(spec.FIELDS[k]["kind"] == "barcode" for k in lf)
-                          for lf in labels_fields)
-            print(f"self-test: all {symbols} symbols across "
-                  f"{len(labels_fields)} label(s) scanned correctly")
+            print(f"self-test: all symbols across {len(labels_fields)} "
+                  f"label(s) scanned correctly")
 
     return 0
 

@@ -1,2 +1,7 @@
 __pycache__/
+
+# These are the generate outputs
 labels/
+
+# This is where the incoming JSON specs go
+specs/
