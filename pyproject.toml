@@ -18,7 +18,7 @@ classifiers = [
     "Intended Audience :: Manufacturing",
     "Topic :: Office/Business",
     "Topic :: Printing",
-    "License-Expression :: GPL-3.0-only",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
 ]
 dependencies = [
     "pystrich>=0.10",
